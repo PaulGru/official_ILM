@@ -3,7 +3,6 @@ import json
 import math
 import subprocess
 import time
-from glob import glob
 from itertools import product
 import pandas as pd
 
