@@ -7,13 +7,13 @@ from itertools import product
 import pandas as pd
 
 # ------------------ CONFIG ------------------
-learning_rates = [1e-6, 1e-5, 5e-5, 1e-4]
+learning_rates = [1e-6, 1e-5, 5e-5]
 seeds = [0, 1, 2, 3]
 nb_steps = [250, 500, 1000, 2500]
 
 base_dir = "runs_ilm"
-train_file = "data_ready/train_env"
-val_file = "data_ready/val_test/val.txt"
+train_file = "data/train_env"
+val_file = "data/val_test/val_ind.txt"
 
 # ------------------ TRAINING ------------------
 def launch_training():
@@ -34,8 +34,8 @@ def launch_training():
             "--output_dir", out_dir,
             "--overwrite_output_dir",
             "--max_seq_length", "128",
-            "--per_device_train_batch_size", "24",
-            "--gradient_accumulation_steps", "4",
+            "--per_device_train_batch_size", "16",
+            "--gradient_accumulation_steps", "3",
             "--per_device_eval_batch_size", "4",
             "--line_by_line", "False",
             "--learning_rate", str(lr),
