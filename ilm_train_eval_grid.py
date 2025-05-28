@@ -11,15 +11,15 @@ learning_rates = [1e-6, 1e-5, 5e-5]
 seeds = [0, 1, 2, 3]
 nb_steps = [250, 500, 1000, 2500]
 
-base_dir = "runs_ilm"
-train_file = "data/train_env"
+base_dir = "runs_elm" # runs_ilm
+train_file = "data" # /train_env
 val_file = "data/val_test/val_ind.txt"
 
 # ------------------ TRAINING ------------------
 def launch_training():
     os.makedirs(base_dir, exist_ok=True)
     for lr, seed, step in product(learning_rates, seeds, nb_steps):
-        exp_name = f"ilm_lr{lr}_seed{seed}_steps{step}"
+        exp_name = f"elm_lr{lr}_seed{seed}_steps{step}" # ilm
         out_dir = os.path.join(base_dir, exp_name)
         os.makedirs(out_dir, exist_ok=True)
 
@@ -28,7 +28,7 @@ def launch_training():
             "--train_file", train_file,
             "--validation_file", val_file,
             "--model_name_or_path", "distilbert-base-uncased",
-            "--model_type", "invariant-distilbert",
+            "--model_type", "distilbert", # invariant-distilbert
             "--tokenizer_name", "distilbert-base-uncased",
             "--do_train", "--do_eval",
             "--output_dir", out_dir,
