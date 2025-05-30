@@ -63,7 +63,7 @@ class InvariantTrainer(transformers.Trainer):
         lr_scheduler = get_scheduler(
             self.args.lr_scheduler_type,
             optimizer,
-            num_warmup_steps=self.args.warmup_steps,
+            num_warmup_steps=self.args.warmup_steps, # à regarder 
             num_training_steps=num_training_steps,
         )
 
@@ -79,7 +79,7 @@ class InvariantTrainer(transformers.Trainer):
             nb_steps: Optional[int] = None,
             nb_steps_heads_saving: Optional[int] = 0,
             resume_from_checkpoint: Optional[str] = None,
-            num_train_epochs: Optional[int] = 1,
+            num_train_epochs: Optional[int] = 1, #mieux vut raisonner en epoch
             nb_steps_model_saving: Optional[int] = 0,
             **kwargs,
     ):
@@ -204,7 +204,7 @@ class InvariantTrainer(transformers.Trainer):
                         optimizer.step()
                         optimizers[env_name].step()
 
-                    lr_scheduler.step()
+                    lr_scheduler.step() # attention car environnement 1 aura toujours plus d'impact que les autres
                     lr_schedulers[env_name].step()
 
                     total_trained_steps += 1

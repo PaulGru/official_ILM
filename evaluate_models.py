@@ -5,15 +5,11 @@ import subprocess
 import shutil
 import pandas as pd
 
-# -------- CONFIGURATION --------
-# Dossier contenant tous les modèles entraînés
-base_dir = "runs_ilm"
-# Fichier de test personnalisé
-custom_test_file = "data/val_test/test.txt"
-# Fichier CSV final de résumé
-output_csv = os.path.join(base_dir, "summary_data_test.csv")
 
-# Paramètres communs pour l’évaluation
+base_dir = "runs_elm" # ilm
+custom_test_file = "data/val_test/val_ood.txt" # test.txt
+output_csv = os.path.join(base_dir, "summary_data_eval_ood.csv") # test
+
 common_args = [
     "--validation_file", custom_test_file,
     "--tokenizer_name", "distilbert-base-uncased",
@@ -23,7 +19,6 @@ common_args = [
     "--line_by_line", "False"
 ]
 
-# -------- ÉVALUATION --------
 records = []
 
 for model_name in sorted(os.listdir(base_dir)):
@@ -45,9 +40,8 @@ for model_name in sorted(os.listdir(base_dir)):
         print(f"Échec de l'évaluation pour {model_name} : {e}")
         continue
 
-    # Copie sécurisée du résultat pour ne pas écraser l'ancien
     default_result = os.path.join(model_path, "eval_results.json")
-    custom_result = os.path.join(model_path, "data_test_results.json")
+    custom_result = os.path.join(model_path, "data_ood_results.json") # data_test_results
 
     if os.path.exists(default_result):
         shutil.copy(default_result, custom_result)
@@ -55,7 +49,6 @@ for model_name in sorted(os.listdir(base_dir)):
         print(f"Fichier eval_results.json manquant pour {model_name}")
         continue
 
-    # Lecture des résultats
     with open(custom_result) as f:
         metrics = json.load(f)
 
@@ -73,7 +66,6 @@ for model_name in sorted(os.listdir(base_dir)):
         "perplexity": perplexity
     })
 
-# -------- SAUVEGARDE DES RÉSULTATS --------
 df = pd.DataFrame(records)
 df.to_csv(output_csv, index=False)
 print(f"Résultats sauvegardés dans : {output_csv}")
