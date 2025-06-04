@@ -466,6 +466,12 @@ def main():
     train_tokenized_datasets = {k: v for k, v in irm_tokenized_datasets.items() if not('validation-file' in k)}
     eval_tokenized_datasets = irm_tokenized_datasets['validation-file']['validation']
 
+    import wandb
+    # Initialise wandb avec un nom de run clair basé sur le dossier de sortie
+    run_name = training_args.output_dir.rstrip("/").split("/")[-1]
+    wandb.init(project="ilm-vs-elm", name=run_name)
+
+
     # Initialize our Trainer
     trainer = InvariantTrainer(
         model=irm_model,
@@ -511,17 +517,10 @@ def main():
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
 
-        metrics = train_result["metrics"]
-
-        # Affichage dans le terminal
-        logger.info("***** Train results *****")
-        for key, value in sorted(metrics.items()):
-            logger.info(f"  {key} = {value}")
-
         # Sauvegarde dans un fichier JSON (ou txt si tu préfères)
         train_results_path = os.path.join(training_args.output_dir, "train_results.json")
         with open(train_results_path, "w") as f:
-            json.dump(metrics, f)
+            json.dump(train_result["metrics"], f)
         
         # Sauvegarde de l'état du trainer (si disponible)
         #trainer.save_state()
@@ -534,9 +533,6 @@ def main():
         print(" [DEBUG] Calling trainer.evaluate()")
         eval_output = trainer.evaluate()
         print("[DEBUG] Evaluation done. Output:", eval_output)
-
-        #perplexity = math.exp(eval_output["eval_loss"])
-        #results["perplexity"] = perplexity
 
         results = {}
         eval_loss = eval_output["eval_loss"]
