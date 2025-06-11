@@ -6,74 +6,91 @@ import os
 def process_csv(file_path, model_type):
     df = pd.read_csv(file_path)
 
-    def parse_model_name(model_name):
-        lr_match = re.search(r'lr([0-9a-zA-Z.-]+)', model_name)
-        seed_match = re.search(r'seed(\d+)', model_name)
-        steps_match = re.search(r'steps(\d+)', model_name)
+    # 1) Parser la run-id ("ilm_lr5e-05_seed0_steps7000")
+    def parse_run_id(s):
+        m = re.match(r'.*?_lr([0-9eE.+-]+)_seed(\d+)_steps(\d+)', s)
+        if not m:
+            return {'lr': None, 'seed': None, 'run_steps': None}
         return {
-            'lr': lr_match.group(1) if lr_match else None,
-            'seed': int(seed_match.group(1)) if seed_match else None,
-            'steps': int(steps_match.group(1)) if steps_match else None
+            'lr':         m.group(1),
+            'seed':       int(m.group(2)),
+            'run_steps':  int(m.group(3))
         }
 
-    parsed_data = df['model'].apply(parse_model_name).apply(pd.Series)
-    df_parsed = pd.concat([df, parsed_data], axis=1)
-    df_parsed['model_type'] = model_type
-    return df_parsed
+    run_info = df['seed'].apply(parse_run_id).apply(pd.Series)
+    df = pd.concat([df, run_info], axis=1)
 
-file_elm = "runs_elm/summary_data_test.csv" #summary_data_eval_ood.csv, summary_results.csv
-file_ilm = "runs_ilm/summary_data_test.csv"  
+    # 2) Parser l'étape d'évaluation depuis "model-XXXX"
+    df['eval_steps'] = (
+        df['model']
+          .str.extract(r'model-(\d+)')
+          .astype(int)
+    )
 
-df_elm = process_csv(file_elm, "eLM")
-df_ilm = process_csv(file_ilm, "iLM")
+    # Tag pour eLM vs iLM
+    df['model_type'] = model_type
+    return df
+
+# --- Chargement des fichiers ---
+df_elm = process_csv("csv/runs_elm/summary_data_eval_out_dist.csv", "eLM") #in
+df_ilm = process_csv("csv/runs_ilm/summary_data_eval_out_dist.csv", "iLM")
 df_all = pd.concat([df_elm, df_ilm], ignore_index=True)
 
-grouped = df_all.groupby(['model_type', 'lr', 'steps']).agg(
-    perplexity_mean=('perplexity', 'mean'),
-    loss_mean=('eval_loss', 'mean')
-).reset_index()
+# --- Calcul des moyennes et écarts-types sur eval_steps ---
+grouped = (
+    df_all
+    .groupby(['model_type', 'eval_steps'])
+    .agg(
+        perplexity_mean=('perplexity', 'mean'),
+        perplexity_std =('perplexity', 'std'),
+        loss_mean      =('eval_loss', 'mean'),
+        loss_std       =('eval_loss', 'std'),
+    )
+    .reset_index()
+)
 
-output_dir = "plots_output_test" # ood, validation
+# --- Préparation du dossier de sortie ---
+output_dir = "plots_output_eval_out" #in
 os.makedirs(output_dir, exist_ok=True)
 
+# --- Figure 1 : Perplexité ---
 plt.figure(figsize=(10, 6))
-for model_type, style in zip(['eLM', 'iLM'], ['solid', 'dashed']):
-    for lr in grouped['lr'].unique():
-        sub_df = grouped[(grouped['model_type'] == model_type) & (grouped['lr'] == lr)].sort_values('steps')
-        plt.plot(
-            sub_df['steps'],
-            sub_df['perplexity_mean'],
-            label=f'{model_type} lr={lr}',
-            linestyle=style,
-            marker='o'
-        )
+for model_type, sub in grouped.groupby('model_type'):
+    plt.errorbar(
+        sub['eval_steps'],
+        sub['perplexity_mean'],
+        yerr=sub['perplexity_std'],
+        label=model_type,
+        marker='o',
+        linestyle='-' if model_type == 'eLM' else '--'
+    )
 
-plt.xlabel("Training Steps")
+plt.xlabel("Étape d'évaluation (checkpoint)")
 plt.ylabel("Perplexité moyenne")
-plt.title("Perplexity sur ind selon eLM/iLM (les résultats sont moyennés par seed (0,1,2,3))") # ood
+plt.title("Perplexité (in-distribution) — eLM vs iLM")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "perplexity_comparison.png"))
+plt.savefig(os.path.join(output_dir, "perplexity_ood_comparaison.png")) #ind
 plt.show()
 
+# --- Figure 2 : Loss d'évaluation ---
 plt.figure(figsize=(10, 6))
-for model_type, style in zip(['eLM', 'iLM'], ['solid', 'dashed']):
-    for lr in grouped['lr'].unique():
-        sub_df = grouped[(grouped['model_type'] == model_type) & (grouped['lr'] == lr)].sort_values('steps')
-        plt.errorbar(
-            sub_df['steps'],
-            sub_df['loss_mean'],
-            label=f'{model_type} lr={lr}',
-            linestyle=style,
-            marker='o'
-        )
+for model_type, sub in grouped.groupby('model_type'):
+    plt.errorbar(
+        sub['eval_steps'],
+        sub['loss_mean'],
+        yerr=sub['loss_std'],
+        label=model_type,
+        marker='o',
+        linestyle='-' if model_type == 'eLM' else '--'
+    )
 
-plt.xlabel("Training Steps")
-plt.ylabel("Perte d'évaluation")
-plt.title("Evaluation Loss sur ins selon eLM/iLM (les résultats sont moyennés par seed (0,1,2,3))") # ood
+plt.xlabel("Étape d'évaluation (checkpoint)")
+plt.ylabel("Perte d'évaluation moyenne")
+plt.title("Evaluation Loss (in-distribution) — eLM vs iLM")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "eval_loss_comparison.png"))
+plt.savefig(os.path.join(output_dir, "eval_loss_ood_comparaison.png")) #ind
 plt.show()

@@ -8,7 +8,7 @@ import pandas as pd
 
 # ------------------ CONFIG ------------------
 learning_rates = [5e-5] # 1e-6, seed pourri, 1e-5 pas mal mais moins bonne que 5e-5
-seeds = [0, 1, 2] # 3
+seeds = [3]
 nb_steps = [7000]
 
 base_dirs = {
@@ -60,8 +60,8 @@ def launch_training(model_key):
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
     t0 = time.time()
-    #print("=== Lancement des entraînements ILM ===")
-    #launch_training("ilm")
-    print("=== Lancement des entraînements ELM ===")
-    launch_training("elm")
+    #print("=== Lancement des entraînements ELM ===")
+    #launch_training("elm")
+    print("=== Lancement des entraînements ILM ===")
+    launch_training("ilm")
     print(f"[DONE] Tous les entraînements terminés en {round(time.time() - t0, 2)}s")

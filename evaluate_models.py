@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import pandas as pd
 
-base_dir = "runs_elm"
+base_dir = "runs_ilm" #elm
 # 1) On déclare nos deux jeux de test
 test_sets = {
     "in_dist":  "data/val_test/val_ind.txt",
@@ -24,7 +24,7 @@ common_args = [
 
 # 3) On boucle d'abord sur chaque mode (in/out)
 for mode, test_file in test_sets.items():
-    print(f"\n▶ Lancement des évaluations [{mode}] avec `{test_file}`\n")
+    print(f"\n Lancement des évaluations [{mode}] avec `{test_file}`\n")
     for seed_dir in sorted(os.listdir(base_dir)):
         seed_path = os.path.join(base_dir, seed_dir)
         if not os.path.isdir(seed_path):
