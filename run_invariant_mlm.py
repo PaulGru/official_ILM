@@ -466,12 +466,6 @@ def main():
     train_tokenized_datasets = {k: v for k, v in irm_tokenized_datasets.items() if not('validation-file' in k)}
     eval_tokenized_datasets = irm_tokenized_datasets['validation-file']['validation']
 
-    import wandb
-    # Initialise wandb avec un nom de run clair basé sur le dossier de sortie
-    run_name = training_args.output_dir.rstrip("/").split("/")[-1]
-    wandb.init(project="ilm-vs-elm", name=run_name)
-
-
     # Initialize our Trainer
     trainer = InvariantTrainer(
         model=irm_model,

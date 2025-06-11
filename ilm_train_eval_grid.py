@@ -7,9 +7,9 @@ from itertools import product
 import pandas as pd
 
 # ------------------ CONFIG ------------------
-learning_rates = [1e-5, 5e-5] # 1e-6, seed pourri
-seeds = [0, 1, 2, 3]
-nb_steps = [7500]
+learning_rates = [5e-5] # 1e-6, seed pourri, 1e-5 pas mal mais moins bonne que 5e-5
+seeds = [0, 1, 2] # 3
+nb_steps = [7000]
 
 base_dirs = {
     "ilm": "runs_ilm",
@@ -23,7 +23,7 @@ def launch_training(model_key):
     if model_key == "ilm":
         train_file = "data/train_env"
     elif model_key == "elm":
-        train_file = "data/train_erm.txt"
+        train_file = "data"
 
     os.makedirs(base_dir, exist_ok=True)
     for lr, seed, step in product(learning_rates, seeds, nb_steps):
@@ -44,14 +44,12 @@ def launch_training(model_key):
             "--per_device_train_batch_size", "16",
             "--gradient_accumulation_steps", "3",
             "--learning_rate", str(lr),
-            "--save_total_limit", "50",
-            "--logging_steps", "500",
-            "--nb_steps_model_saving", "500",
+            "--save_total_limit", "60",
+            "--logging_steps", "1000",
+            "--nb_steps_model_saving", "1000",
             "--nb_steps", str(step),
             "--fp16",
-            "--seed", str(seed),
-            "--report_to", "wandb",
-            "--logging_dir", "./logs"
+            "--seed", str(seed)
         ]
 
         print(f"[TRAIN] Launching: {exp_name}")
@@ -62,8 +60,8 @@ def launch_training(model_key):
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
     t0 = time.time()
-    print("=== Lancement des entraînements ILM ===")
-    launch_training("ilm")
+    #print("=== Lancement des entraînements ILM ===")
+    #launch_training("ilm")
     print("=== Lancement des entraînements ELM ===")
     launch_training("elm")
     print(f"[DONE] Tous les entraînements terminés en {round(time.time() - t0, 2)}s")
