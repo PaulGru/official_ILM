@@ -50,7 +50,7 @@ grouped = (
 )
 
 # --- Préparation du dossier de sortie ---
-output_dir = "plots_output_eval_out" #in
+output_dir = "plots_output_eval_out_lr_5e-05" #in
 os.makedirs(output_dir, exist_ok=True)
 
 # --- Figure 1 : Perplexité ---
@@ -67,11 +67,11 @@ for model_type, sub in grouped.groupby('model_type'):
 
 plt.xlabel("Étape d'évaluation (checkpoint)")
 plt.ylabel("Perplexité moyenne")
-plt.title("Perplexité (in-distribution) — eLM vs iLM")
+plt.title("Perplexité (out-distribution) — eLM vs iLM") #in
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "perplexity_ood_comparaison.png")) #ind
+plt.savefig(os.path.join(output_dir, "perplexity_out_comparaison.png")) #in
 plt.show()
 
 # --- Figure 2 : Loss d'évaluation ---
@@ -88,7 +88,7 @@ for model_type, sub in grouped.groupby('model_type'):
 
 plt.xlabel("Étape d'évaluation (checkpoint)")
 plt.ylabel("Perte d'évaluation moyenne")
-plt.title("Evaluation Loss (in-distribution) — eLM vs iLM")
+plt.title("Evaluation Loss (out-distribution) — eLM vs iLM") #in
 plt.legend()
 plt.grid(True)
 plt.tight_layout()

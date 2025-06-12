@@ -15,13 +15,6 @@ test_sets = {
 # 2) On prépare un dictionnaire pour collecter les résultats
 all_records = { mode: [] for mode in test_sets }
 
-common_args = [
-    "--tokenizer_name", "distilbert-base-uncased",
-    "--do_eval",
-    "--max_seq_length", "128",
-    "--per_device_eval_batch_size", "4"
-]
-
 # 3) On boucle d'abord sur chaque mode (in/out)
 for mode, test_file in test_sets.items():
     print(f"\n Lancement des évaluations [{mode}] avec `{test_file}`\n")
@@ -35,7 +28,7 @@ for mode, test_file in test_sets.items():
                 continue
 
             model_path = os.path.join(seed_path, model_folder)
-            print(f"[{mode}] Seed `{seed_dir}` – Modèle `{model_folder}`")
+            print(f"[{mode}] Seed `{seed_dir}` - Modèle `{model_folder}`")
 
             eval_out = os.path.join(model_path, f"eval_{mode}")
             os.makedirs(eval_out, exist_ok=True)
@@ -43,10 +36,10 @@ for mode, test_file in test_sets.items():
             cmd = [
                 "python", "run_invariant_mlm.py",
                 "--model_name_or_path", model_path,
-                "--output_dir",            eval_out,
-                "--validation_file",       test_file
-            ] + common_args
-
+                "--do_eval",
+                "--output_dir", eval_out,
+                "--validation_file", test_file
+            ]
             try:
                 subprocess.run(cmd, check=True)
             except subprocess.CalledProcessError as e:
@@ -64,13 +57,13 @@ for mode, test_file in test_sets.items():
 
             metrics = json.load(open(default_result))
             loss   = metrics.get("eval_loss")
-            perp   = math.exp(loss) if loss is not None else None
+            perplexite   = math.exp(loss) if loss is not None else None
 
             all_records[mode].append({
                 "seed":       seed_dir,
                 "model":      model_folder,
                 "eval_loss":  loss,
-                "perplexity": perp
+                "perplexity": perplexite
             })
 
 # 4) On écrit un CSV par mode
