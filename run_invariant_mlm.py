@@ -119,8 +119,8 @@ class ModelArguments:
         default=False,
         metadata={"help": "Re-initialize the base language model (and thus the language modeling heads) before training"}
     )
-    ensembling: Optional[bool] = field(
-        default=False,
+    mode: Optional[str] = field(
+        default="ilm",
         metadata={
             "help": "Whether to train the heads as an ensemble instead of following the IRM-games dynamics"}
     )
@@ -209,12 +209,23 @@ class DataTrainingArguments:
             #     assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
+@dataclass
+class CustomTrainingArguments(TrainingArguments):
+    """
+    On surcharge la classe par défaut pour permettre la boucle d'entraînement IRM Games.
+    """
+    head_updates_per_encoder_update : Optional[int] = field(
+        default=1,
+        metadata={"help": "Number of head updates per encoder update (IRM Games)"}
+    )
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, CustomTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -274,8 +285,7 @@ def main():
     # download the dataset.
     irm_folder = data_args.train_file
     irm_datasets = {}
-    
-    if training_args.do_train:
+    if data_args.train_file is not None:
         for file in os.listdir(irm_folder):
             if file.endswith('.txt'):
                 env_name = file.split(".")[0]
@@ -409,7 +419,7 @@ def main():
             tokenized_datasets = datasets.map(
                 tokenize_function,
                 batched=True,
-                num_proc=1,
+                num_proc=data_args.preprocessing_num_workers,
                 remove_columns=[text_column_name],
                 load_from_cache_file=not data_args.overwrite_cache,
             )
@@ -424,7 +434,7 @@ def main():
             tokenized_datasets = datasets.map(
                 tokenize_function,
                 batched=True,
-                num_proc=1,
+                num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
             )
@@ -485,21 +495,34 @@ def main():
         else:
             checkpoint = None
 
-        if model_args.ensembling:
+        if model_args.mode == "ensemble":
             logger.info("TRAINING WITH ENSEMBLE -- NOT FOLLOWING IRM-GAMES DYNAMIC")
-            train_result = trainer.ensemble_train(training_set=train_tokenized_datasets,
-                                                   nb_steps=nb_steps,
-                                                   nb_steps_heads_saving=model_args.nb_steps_heads_saving,
-                                                   nb_steps_model_saving=model_args.nb_steps_model_saving,
-                                                   resume_from_checkpoint=checkpoint)
-        else:
-            train_result = trainer.invariant_train(training_set=train_tokenized_datasets,
-                                               nb_steps=nb_steps,
-                                               nb_steps_heads_saving=model_args.nb_steps_heads_saving,
-                                               nb_steps_model_saving=model_args.nb_steps_model_saving,
-                                               resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+            train_result = trainer.ensemble_train(
+                training_set=train_tokenized_datasets,
+                nb_steps=nb_steps,
+                nb_steps_heads_saving=model_args.nb_steps_heads_saving,
+                nb_steps_model_saving=model_args.nb_steps_model_saving,
+                resume_from_checkpoint=checkpoint)
+                
+        elif model_args.mode == "ilm":
+            train_result = trainer.invariant_train(
+                training_set=train_tokenized_datasets,
+                nb_steps=nb_steps,
+                nb_steps_heads_saving=model_args.nb_steps_heads_saving,
+                nb_steps_model_saving=model_args.nb_steps_model_saving,
+                resume_from_checkpoint=checkpoint)
+        
+        elif model_args.mode =="game":
+            train_result = trainer.invariant_train_games(
+                training_set=train_tokenized_datasets,
+                nb_steps=nb_steps,
+                nb_steps_heads_saving=model_args.nb_steps_heads_saving,
+                nb_steps_model_saving=model_args.nb_steps_model_saving,
+                resume_from_checkpoint=checkpoint)
 
+        trainer.save_model()  # Saves the tokenizer too for easy upload
+        tokenizer.save_pretrained(training_args.output_dir)
+        
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
         if trainer.is_world_process_zero():
             with open(output_train_file, "w") as writer:
@@ -510,11 +533,6 @@ def main():
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
-
-        # Sauvegarde dans un fichier JSON (ou txt si tu préfères)
-        train_results_path = os.path.join(training_args.output_dir, "train_results.json")
-        with open(train_results_path, "w") as f:
-            json.dump(train_result["metrics"], f)
         
         # Sauvegarde de l'état du trainer (si disponible)
         #trainer.save_state()
@@ -523,12 +541,7 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
-        print(" [DEBUG] Calling trainer.evaluate()")
         eval_output = trainer.evaluate()
-        print("[DEBUG] Evaluation done. Output:", eval_output)
-
-        results = {}
         eval_loss = eval_output["eval_loss"]
         results["eval_loss"] = eval_loss
         results["perplexity"] = math.exp(eval_loss)
@@ -537,14 +550,9 @@ def main():
             # Log dans un fichier txt (optionnel)
             output_txt = os.path.join(training_args.output_dir, "eval_results_mlm.txt")
             with open(output_txt, "w") as f:
-                for k, v in sorted(results.items()):
-                    logger.info(f"  {k} = {v}")
-                    f.write(f"{k} = {v}\n")
-
-            # Sauvegarde manuelle dans eval_results.json
-            output_json = os.path.join(training_args.output_dir, "eval_results.json")
-            with open(output_json, "w") as f:
-                json.dump(results, f)
+                for key, value in sorted(results.items()):
+                    logger.info(f"  {key} = {value}")
+                    f.write(f"{key} = {value}\n")
 
     return results
 

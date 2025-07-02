@@ -48,7 +48,6 @@ class InvariantDistilBertForMaskedLM(DistilBertPreTrainedModel):
             )
 
         self.encoder = DistilBertModel(config)
-        #self.encoder.to('cuda')
 
         if len(config.envs) == 0:
             self.envs = ['erm']

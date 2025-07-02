@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import pandas as pd
 
-base_dir = "runs_ilm" #elm
+base_dir = "runs_ilmg" # ilm
 # 1) On déclare nos deux jeux de test
 test_sets = {
     "in_dist":  "data/val_test/val_ind.txt",
@@ -45,30 +45,3 @@ for mode, test_file in test_sets.items():
             except subprocess.CalledProcessError as e:
                 print(f"Échec pour {model_folder} : {e}")
                 continue
-
-            default_result = os.path.join(eval_out, "eval_results.json")
-            if not os.path.exists(default_result):
-                print(f"Pas de eval_results.json pour {model_folder}")
-                continue
-
-            # copie d’archive (optionnelle)
-            archived = os.path.join(model_path, f"eval_{mode}_results.json")
-            shutil.copy(default_result, archived)
-
-            metrics = json.load(open(default_result))
-            loss   = metrics.get("eval_loss")
-            perplexite   = math.exp(loss) if loss is not None else None
-
-            all_records[mode].append({
-                "seed":       seed_dir,
-                "model":      model_folder,
-                "eval_loss":  loss,
-                "perplexity": perplexite
-            })
-
-# 4) On écrit un CSV par mode
-for mode, records in all_records.items():
-    df     = pd.DataFrame(records)
-    out_csv = os.path.join(base_dir, f"summary_data_eval_{mode}.csv")
-    df.to_csv(out_csv, index=False)
-    print(f"Résultats {mode} → `{out_csv}`")
