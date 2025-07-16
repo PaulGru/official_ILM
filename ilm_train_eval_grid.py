@@ -7,8 +7,8 @@ from itertools import product
 import pandas as pd
 
 # ------------------ CONFIG ------------------
-learning_rates = [5e-5]
-seeds = [0, 1, 2 , 3, 4]
+learning_rates = [1e-5] #5e-5
+seeds = [0]
 nb_steps = [9000]
 
 base_dirs = {
@@ -49,8 +49,8 @@ def launch_training(model_key):
             "--overwrite_output_dir",
             "--max_seq_length", "128",
             "--preprocessing_num_workers", "16",
-            "--per_device_train_batch_size", "16",
-            "--gradient_accumulation_steps", "3",
+            "--per_device_train_batch_size", "16", #16
+            "--gradient_accumulation_steps", "3",  #3
             "--learning_rate", str(lr),
             "--save_total_limit", "60",
             "--nb_steps_model_saving", "1500",
@@ -70,8 +70,8 @@ if __name__ == "__main__":
     t0 = time.time()
     # print("=== Lancement des entraînements ELM ===")
     # launch_training("elm")
-    # print("=== Lancement des entraînements ILM ===")
-    # launch_training("ilm")
-    print("=== Lancement des entraînements ILM Games ===")
-    launch_training("ilmg")
+    print("=== Lancement des entraînements ILM ===")
+    launch_training("ilm")
+    # print("=== Lancement des entraînements ILM Games ===")
+    # launch_training("ilmg")
     print(f"[DONE] Tous les entraînements terminés en {round(time.time() - t0, 2)}s")

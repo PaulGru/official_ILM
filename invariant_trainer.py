@@ -304,12 +304,17 @@ class InvariantTrainer(transformers.Trainer):
         dataloaders, optimizers, lr_schedulers = {}, {}, {}
         for env_name, data_features in training_set.items():
             dataloaders[env_name] = self.get_single_train_dataloader(env_name, data_features["train"])
-            optimizer, lr_scheduler = self.create_optimizer_and_scheduler(self.model.lm_heads[env_name],
-                                                                          num_training_steps=max_steps)
+            optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
+                self.model.lm_heads[env_name],
+                num_training_steps=max_steps
+            )
             optimizers[env_name] = optimizer
             lr_schedulers[env_name] = lr_scheduler
 
-        optimizer, lr_scheduler = self.create_optimizer_and_scheduler(self.model.encoder, num_training_steps=max_steps)
+        optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
+            self.model.encoder,
+            num_training_steps=max_steps
+        )
 
         self.state = TrainerState()
 
@@ -459,12 +464,17 @@ class InvariantTrainer(transformers.Trainer):
         dataloaders, optimizers, lr_schedulers = {}, {}, {}
         for env_name, data_features in training_set.items():
             dataloaders[env_name] = self.get_single_train_dataloader(env_name, data_features["train"])
-            optimizer, lr_scheduler = self.create_optimizer_and_scheduler(self.model.lm_heads[env_name],
-                                                                        num_training_steps=max_steps)
+            optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
+                self.model.lm_heads[env_name],
+                num_training_steps=max_steps
+            )
             optimizers[env_name] = optimizer
             lr_schedulers[env_name] = lr_scheduler
 
-        optimizer, lr_scheduler = self.create_optimizer_and_scheduler(self.model.encoder, num_training_steps=max_steps)
+        optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
+            self.model.encoder,
+            num_training_steps=max_steps
+        )
 
         self.state = TrainerState()
 
