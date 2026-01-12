@@ -214,9 +214,11 @@ class CustomTrainingArguments(TrainingArguments):
     """
     On surcharge la classe par défaut pour permettre la boucle d'entraînement IRM Games.
     """
-    head_updates_per_encoder_update : Optional[int] = field(
-        default=1,
-        metadata={"help": "Number of head updates per encoder update (IRM Games)"}
+    head_updates_per_encoder_update: Optional[int] = field(
+        default=1, metadata={"help": "Number of head updates per encoder update (IRM Games)"}
+    )
+    freeze_phi: bool = field(
+        default=False, metadata={"help": "Si True, n'update jamais l'encodeur partagé φ (IRM-Games, φ fixe)."}
     )
 
 
@@ -494,17 +496,8 @@ def main():
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
-
-        if model_args.mode == "ensemble":
-            logger.info("TRAINING WITH ENSEMBLE -- NOT FOLLOWING IRM-GAMES DYNAMIC")
-            train_result = trainer.ensemble_train(
-                training_set=train_tokenized_datasets,
-                nb_steps=nb_steps,
-                nb_steps_heads_saving=model_args.nb_steps_heads_saving,
-                nb_steps_model_saving=model_args.nb_steps_model_saving,
-                resume_from_checkpoint=checkpoint)
                 
-        elif model_args.mode == "ilm":
+        if model_args.mode == "ilm":
             train_result = trainer.invariant_train(
                 training_set=train_tokenized_datasets,
                 nb_steps=nb_steps,

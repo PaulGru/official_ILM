@@ -52,14 +52,8 @@ class InvariantTrainer(transformers.Trainer):
                 "eps": self.args.adam_epsilon,
             }
         optimizer_kwargs["lr"] = self.args.learning_rate
-        if self.sharded_dpp:
-            optimizer = OSS(
-                params=optimizer_grouped_parameters,
-                optim=optimizer_cls,
-                **optimizer_kwargs,
-            )
-        else:
-            optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+        
+        optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         lr_scheduler = get_scheduler(
             self.args.lr_scheduler_type,
@@ -252,176 +246,6 @@ class InvariantTrainer(transformers.Trainer):
             }
         }
 
-
-    def ensemble_train(
-            self,
-            training_set,
-            nb_steps: Optional[int] = None,
-            nb_steps_heads_saving: Optional[int] = 0,
-            resume_from_checkpoint: Optional[str] = None,
-            num_train_epochs: Optional[int] = 1,
-            nb_steps_model_saving: Optional[int] = 0,
-            **kwargs,
-    ):
-        """
-        Training the heads as en ensemble instead of following the IRM-games dynamic
-
-        Args:
-            resume_from_checkpoint (:obj:`str`, `optional`):
-                Local path to a saved checkpoint as saved by a previous instance of :class:`~transformers.Trainer`. If
-                present, training will resume from the model/optimizer/scheduler states loaded here.
-            trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
-                The trial run or the hyperparameter dictionary for hyperparameter search.
-            kwargs:
-                Additional keyword arguments used to hide deprecated arguments
-        """
-        if "model_path" in kwargs:
-            resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
-                FutureWarning,
-            )
-
-        if nb_steps is None and num_train_epochs is None:
-            raise ValueError("Both nb_steps and num_train_epochs can't be None at the same time")
-
-        if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
-
-        min_train_set_size = min([len(data["train"]) for _, data in training_set.items()])
-
-        if nb_steps is not None:
-            max_steps = nb_steps
-            num_update_steps_per_epoch = math.floor(
-                min_train_set_size / (self.args.gradient_accumulation_steps * self.args.train_batch_size))
-            num_train_epochs = max(1, math.floor(max_steps / num_update_steps_per_epoch))
-        else:
-            num_update_steps_per_epoch = math.floor(
-                min_train_set_size / (self.args.gradient_accumulation_steps * self.args.train_batch_size))
-            max_steps = num_update_steps_per_epoch * num_train_epochs
-
-        dataloaders, optimizers, lr_schedulers = {}, {}, {}
-        for env_name, data_features in training_set.items():
-            dataloaders[env_name] = self.get_single_train_dataloader(env_name, data_features["train"])
-            optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
-                self.model.lm_heads[env_name],
-                num_training_steps=max_steps
-            )
-            optimizers[env_name] = optimizer
-            lr_schedulers[env_name] = lr_scheduler
-
-        optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
-            self.model.encoder,
-            num_training_steps=max_steps
-        )
-
-        self.state = TrainerState()
-
-        if self.args.n_gpu > 0:
-            self.model.to('cuda')
-
-        if self.args.n_gpu > 1:
-            self.model = torch.nn.DataParallel(self.model)
-
-        total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        num_examples = total_train_batch_size * max_steps
-
-        logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {num_examples}")
-        logger.info(f"  Num Epochs = {num_train_epochs}")
-        logger.info(f"  num_update_steps_per_epoch = {num_update_steps_per_epoch}")
-        logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
-        logger.info(f"  Gradient Accumulation steps = {self.args.gradient_accumulation_steps}")
-        logger.info(f"  Total optimization steps = {max_steps}")
-
-        saving_heads = bool(nb_steps_heads_saving > 0)
-        saving_intermediary_models = bool(nb_steps_model_saving > 0)
-        total_trained_steps = 0
-
-        print("Num train epoch: ", num_train_epochs)
-        print("Batch size: ", total_train_batch_size)
-        print("Train data size: ", min_train_set_size)
-        print("num_update_steps_per_epoch: ", num_update_steps_per_epoch)
-
-        for epoch in range(num_train_epochs):
-            logger.info(f" Epoch: {epoch}")
-            print("epoch: ", epoch)
-            # make all dataloader iterateable
-            iter_loaders = {}
-            for env_name in training_set.keys():
-                train_loader = dataloaders[env_name]
-                iter_loaders[env_name] = iter(train_loader)
-
-            for steps_trained_in_current_epoch in tqdm(range(num_update_steps_per_epoch)):
-                if total_trained_steps >= max_steps:
-                    break
-
-                for env_name in training_set.keys():
-                    logger.info(f" Update on environement {env_name}")
-                    # get a batch
-                    optimizer.zero_grad()
-                    for e_n in training_set.keys():
-                        optimizers[e_n].zero_grad()
-
-                    batch = next(iter_loaders[env_name])
-                    # uncomment it, for CPU only run
-                    if self.args.n_gpu > 0:
-                        batch = batch.to('cuda')
-
-                    # loss.backward() is done inside training step
-                    loss = self.training_step(self.model, batch)
-
-                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
-                        if self.use_amp:
-                            # AMP: gradients need unscaling
-                            self.scaler.unscale_(optimizer)
-                            for env_name in training_set.keys():
-                                self.scaler.unscale_(optimizers[env_name])
-
-                        if hasattr(optimizer, "clip_grad_norm"):
-                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
-                            optimizer.clip_grad_norm(self.args.max_grad_norm)
-                            for e_n in training_set.keys():
-                                optimizers[e_n].clip_grad_norm(self.args.max_grad_norm)
-                        else:
-                            # Revert to normal clipping otherwise, handling Apex or full precision
-                            torch.nn.utils.clip_grad_norm_(
-                                self.model.parameters(),
-                                self.args.max_grad_norm,
-                            )
-
-                    if self.use_amp:
-                        self.scaler.step(optimizer)
-                        for e_n in training_set.keys():
-                            self.scaler.step(optimizers[e_n])
-                        self.scaler.update()
-                    else:
-                        optimizer.step()
-                        for e_n in training_set.keys():
-                            optimizers[e_n].step()
-
-                    lr_scheduler.step()
-                    for e_n in training_set.keys():
-                        lr_schedulers[e_n].step()
-
-                    total_trained_steps += 1
-                    if saving_heads:
-                        if total_trained_steps % nb_steps_heads_saving == 0:
-                            self.save_heads(total_trained_steps)
-                    if saving_intermediary_models:
-                        if total_trained_steps % nb_steps_model_saving == 0:
-                            self.save_intermediary_model(total_trained_steps)
-
-        return {
-            "metrics": {
-                "final_loss": loss.item(),
-                "nb_steps": max_steps,
-                "global_step": total_trained_steps
-            }
-        }
-
     
     def invariant_train_games(
         self,
@@ -435,6 +259,7 @@ class InvariantTrainer(transformers.Trainer):
     ):
 
         head_updates_per_encoder_update = getattr(self.args, "head_updates_per_encoder_update", 1)
+        freeze_phi = getattr(self.args, "freeze_phi", False)
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
@@ -471,9 +296,12 @@ class InvariantTrainer(transformers.Trainer):
             optimizers[env_name] = optimizer
             lr_schedulers[env_name] = lr_scheduler
 
+        # optim/sched pour l'encodeur : calibrer sur le nb d'updates φ
+        num_envs = len(training_set)
+        enc_num_steps = max(1, math.ceil(max_steps / (head_updates_per_encoder_update * num_envs)))
         optimizer, lr_scheduler = self.create_optimizer_and_scheduler(
             self.model.encoder,
-            num_training_steps=max_steps
+            num_training_steps=enc_num_steps
         )
 
         self.state = TrainerState()
@@ -513,6 +341,13 @@ class InvariantTrainer(transformers.Trainer):
             for env_name in training_set.keys():
                 train_loader = dataloaders[env_name]
                 iter_loaders[env_name] = iter(train_loader)
+            
+            def next_batch(env_name):
+                try:
+                    return next(iter_loaders[env_name])
+                except StopIteration:
+                    iter_loaders[env_name] = iter(dataloaders[env_name])
+                    return next(iter_loaders[env_name])
 
             for steps_trained_in_current_epoch in tqdm(range(num_update_steps_per_epoch)):
                 if total_trained_steps >= max_steps:
@@ -525,6 +360,8 @@ class InvariantTrainer(transformers.Trainer):
                     self.model.encoder.requires_grad_(False)
                     for env_name in training_set.keys():
                         logger.info(f" Update on environement {env_name}")
+                        
+                        optimizer.zero_grad()
                         self.model.lm_heads[env_name].requires_grad_(True)
                         optimizers[env_name].zero_grad()
 
@@ -533,7 +370,6 @@ class InvariantTrainer(transformers.Trainer):
                             inputs = inputs.to('cuda')
 
                         loss = self.training_step(self.model, inputs)
-
                         env_step_losses[env_name] = loss.item()
 
                         if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
@@ -550,6 +386,7 @@ class InvariantTrainer(transformers.Trainer):
                         
                         if self.use_amp:
                             self.scaler.step(optimizers[env_name])
+                            self.scaler.update()
                         else:
                             optimizers[env_name].step()
 
@@ -565,45 +402,46 @@ class InvariantTrainer(transformers.Trainer):
                     heads_loss_log.append(env_step_losses)
 
                 # === Phase 2: update shared encoder ===
-                self.model.encoder.requires_grad_(True)
-                for env_name in training_set.keys():
-                    self.model.lm_heads[env_name].requires_grad_(False)
+                if not freeze_phi:
+                    self.model.encoder.requires_grad_(True)
+                    for env_name in training_set.keys():
+                        self.model.lm_heads[env_name].requires_grad_(False)
 
-                optimizer.zero_grad()
-                total_loss = 0.0
-                for env_name in training_set.keys():
-                    inputs = next(iter_loaders[env_name])
-                    if self.args.n_gpu > 0:
-                        inputs = inputs.to('cuda')
-                    loss = self.training_step(self.model, inputs)
-                    total_loss += loss
+                    optimizer.zero_grad()
+                    total_loss = 0.0
+                    for env_name in training_set.keys():
+                        inputs = next(iter_loaders[env_name])
+                        if self.args.n_gpu > 0:
+                            inputs = inputs.to('cuda')
+                        loss = self.training_step(self.model, inputs)
+                        total_loss += loss
 
-                if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
+                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
+                        if self.use_amp:
+                            self.scaler.unscale_(optimizer)
+
+                    if hasattr(optimizer, "clip_grad_norm"):
+                        optimizer.clip_grad_norm(self.args.max_grad_norm)
+                    else:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.encoder.parameters(),
+                            self.args.max_grad_norm,
+                        )
+
                     if self.use_amp:
-                        self.scaler.unscale_(optimizer)
+                        self.scaler.step(optimizer)
+                        self.scaler.update()
+                    else:
+                        optimizer.step()
 
-                if hasattr(optimizer, "clip_grad_norm"):
-                    optimizer.clip_grad_norm(self.args.max_grad_norm)
-                else:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.encoder.parameters(),
-                        self.args.max_grad_norm,
-                    )
+                    lr_scheduler.step()
 
-                if self.use_amp:
-                    self.scaler.step(optimizer)
-                    self.scaler.update()
-                else:
-                    optimizer.step()
+                    total_loss_val = total_loss.item()
+                    train_loss_log.append({"step": total_trained_steps, "loss": total_loss_val/len(training_set)})
 
-                lr_scheduler.step()
-
-                total_loss_val = total_loss.item()
-                train_loss_log.append({"step": total_trained_steps, "loss": total_loss_val/len(training_set)})
-
-                if total_trained_steps % log_every == 0:
-                    pd.DataFrame(train_loss_log).to_csv(csv_total_loss_path, index=False)
-                    pd.DataFrame(heads_loss_log).to_csv(csv_heads_loss_path, index=False)
+                    if total_trained_steps % log_every == 0:
+                        pd.DataFrame(train_loss_log).to_csv(csv_total_loss_path, index=False)
+                        pd.DataFrame(heads_loss_log).to_csv(csv_heads_loss_path, index=False)
 
         if train_loss_log:
             pd.DataFrame(train_loss_log).to_csv(csv_total_loss_path, index=False)

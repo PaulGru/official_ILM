@@ -4,7 +4,8 @@ from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import MaskedLMOutput
 from transformers.models.distilbert.modeling_distilbert import DistilBertPreTrainedModel, DistilBertModel, gelu
 from transformers.models.distilbert.configuration_distilbert import DistilBertConfig
-
+from transformers.utils import logging
+logger = logging.get_logger(__name__)
 
 class DistilBertLMHead(nn.Module):
     """DistilBert Head for masked language modeling."""

@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import pandas as pd
 
-base_dir = "runs_ilm" # ilm
+base_dir = "runs_ilmg" # ilm
 # 1) On déclare nos deux jeux de test
 test_sets = {
     "in_dist":  "data/val_test/val_ind.txt",
